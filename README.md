@@ -12,6 +12,8 @@ dot mod <your-name>.dot
 
 The CLI shows you the level picker, clones the repo, and drops you into the project. From there, follow the level you're on — Claude picks up the right context for each step automatically.
 
+> **Domain naming:** your `.dot` name must be **9 or more characters** and end in **exactly 2 digits** — e.g. `myappname01`, `rockpaper42`.
+
 ## Prerequisites
 
 - **Polkadot Desktop** — the whole tutorial runs inside it. 
