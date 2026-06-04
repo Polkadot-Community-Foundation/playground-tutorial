@@ -47,7 +47,7 @@ Real PvP. Create a room, share a link or QR code, opponent joins, you play live 
 | ---------------- | ------------- | ----------------------------------- |
 | UI               | Level 1       | React 19 + Vite + TypeScript        |
 | Wallet           | Level 1       | Product SDK (host-managed account)  |
-| Hosting          | Level 1       | `dot deploy` → Bulletin + DotNS     |
+| Hosting          | Level 1       | `pg deploy` → Bulletin + DotNS     |
 | Off-chain store  | Level 2       | Bulletin Chain (content-addressed)  |
 | Smart contract   | Level 3       | `cdm` + PVM (Rust) on Asset Hub     |
 | Live multiplayer | Level 4       | Statement Store (commit-reveal)     |
