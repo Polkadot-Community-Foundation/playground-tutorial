@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { isInsideContainerSync } from "@parity/product-sdk-host";
 import { useSignerState, signerManager, short } from "./utils.ts";
 import Home from "./pages/Home.tsx";
 import SoloGame from "./pages/SoloGame.tsx";
@@ -7,10 +8,9 @@ type View = { page: "home" } | { page: "solo" };
 
 export default function App() {
     const { status, accounts, selectedAccount, error } = useSignerState();
-
+   
     useEffect(() => {
-        // Host API only — no dev fallback
-        signerManager.connect().then(result => {
+        signerManager.connect(isInsideContainerSync() ? "host" : "dev").then(result => {
             if (result.ok && result.value.length > 0) {
                 signerManager.selectAccount(result.value[0].address);
             }
