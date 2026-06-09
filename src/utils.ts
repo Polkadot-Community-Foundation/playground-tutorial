@@ -1,17 +1,33 @@
-import { useState, useEffect } from "react";
-import { SignerManager, type SignerState } from "@polkadot-apps/signer";
+import { useState, useEffect, useSyncExternalStore } from "react";
+import {
+    SignerManager,
+    HostProvider,
+    DevProvider,
+    type SignerState,
+} from "@parity/product-sdk-signer";
 import type { Move, RoundResult, PlayerData, GameData } from "./types.ts";
 
 // ---------------------------------------------------------------------------
 // Signer Manager (Host API)
 // ---------------------------------------------------------------------------
 
-export const signerManager = new SignerManager({ dappName: "rps-game" });
+const PRODUCT_ID = "playground-tutorial.dot";
+
+export const signerManager = new SignerManager({
+    dappName: "playground-tutorial",
+    createProvider: (type) => type === "host"
+            ? new HostProvider({
+                  productAccount: { dotNsIdentifier: PRODUCT_ID, derivationIndex: 0 },
+              })
+            : new DevProvider()
+    
+});
 
 export function useSignerState(): SignerState {
-    const [state, setState] = useState<SignerState>(signerManager.getState());
-    useEffect(() => signerManager.subscribe(setState), []);
-    return state;
+   return useSyncExternalStore(
+    (cb) => signerManager.subscribe(cb),
+    () => signerManager.getState(),
+  );
 }
 
 // ---------------------------------------------------------------------------
