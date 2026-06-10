@@ -11,44 +11,54 @@ Read [00-overview.md](00-overview.md) first for the SDK package set and invarian
 
 ## Goal
 
-Move the game history JSON itself to Bulletin Chain (content-addressed). Keep a **CID pointer in localStorage** per account (`rps-game-cid:<address>`) so the app can resolve the latest history back to the player on reload. In Level 3, this pointer moves out of localStorage and into the leaderboard smart contract.
+Move the game history JSON itself to Bulletin Chain (content-addressed). Keep a **CID pointer in localStorage** per account (`rps-game-cid:<ss58Address>`) so the app can resolve the latest history back to the player on reload. In Level 3, this pointer moves out of localStorage and into the leaderboard smart contract.
+
+None of this exists in the repo yet — the developer builds it in this level (add the helpers to `src/utils.ts`).
 
 ## Network
 
 Paseo Next v2 (v1 retired 2026-05-20):
 
-- **Asset Hub Next**: `wss://paseo-asset-hub-next-rpc.polkadot.io` (genesis `0x173cea9d…`)
 - **Bulletin Next**: `wss://paseo-bulletin-next-rpc.polkadot.io`
-- **IPFS gateway**: `https://paseo-bulletin-next-ipfs.polkadot.io/ipfs/<cid>` (primary; fall back to `dweb.link`, `ipfs.io`, `nftstorage.link`)
+- **IPFS gateway** (manual verification): `https://paseo-bulletin-next-ipfs.polkadot.io/ipfs/<cid>`
+- Cloud Storage preset: `environment: "paseo"` (a `"summit"` preset exists for the event network)
 
 ## What to use (current SDK)
 
-The repo does NOT use `@parity/product-sdk-bulletin` directly. It uses the **host's preimage manager** because Polkadot Desktop has an optimized path: upload bytes via `preimageManager.submit(bytes)`, host turns them into a Bulletin extrinsic + IPFS pin. This works in dev mode (where opening an Asset Hub chain client is awkward) and avoids spinning up a second chain client just for Bulletin.
+`@parity/product-sdk-cloud-storage` (latest — do not pin). `CloudStorageClient`
+wraps the Bulletin chain: `store()` submits a signed `TransactionStorage.store`
+extrinsic and handles chunking, manifests, and CID calculation; `fetchBytes()`
+reads back through the **host's preimage subscription** (container-only — there
+is no public-gateway fetch in the client).
 
 ```ts
-import { preimageManager, requestPermission } from "@novasamatech/host-api-wrapper";
-import { blake2b } from "@noble/hashes/blake2.js";
-import { CID } from "multiformats/cid";
-import * as raw from "multiformats/codecs/raw";
+// In src/utils.ts — signerManager is already defined in this file (Level 1).
+import { CloudStorageClient, createLazySigner } from "@parity/product-sdk-cloud-storage";
 
-// 1) Pre-compute the CID locally so the caller can use it before the tx lands.
-//    Bulletin uses blake2b-256 multihash (code 0xb220) wrapped in a CIDv1 raw codec.
-function calculateCID(bytes: Uint8Array): string {
-    const hash = blake2b(bytes, { dkLen: 32 });
-    const multihash = /* varint(0xb220) | varint(32) | hash */;
-    return CID.createV1(raw.code, { code: 0xb220, size: 32, bytes: multihash, digest: hash }).toString();
+// Create once, lazily — the signer resolves at submit time, after connect.
+const client = await CloudStorageClient.create({
+    environment: "paseo",
+    signer: createLazySigner(() => signerManager.getSigner()),
+});
+
+// Upload: bytes in → signed extrinsic → CID out.
+async function uploadToBulletin(bytes: Uint8Array): Promise<string> {
+    const result = await client.store(bytes).send();
+    if (!result.cid) throw new Error("upload returned no CID");
+    return result.cid.toString();
 }
 
-// 2) Ask the host once for PreimageSubmit permission, then submit.
-async function uploadToBulletin(bytes: Uint8Array): Promise<string> {
-    await requestPermission({ tag: "PreimageSubmit", value: undefined });
-    const cid = calculateCID(bytes);
-    await preimageManager.submit(bytes);
-    return cid;
+// Read back (inside the host):
+async function fetchFromBulletin(cid: string): Promise<Uint8Array> {
+    return client.fetchBytes(cid);
 }
 ```
 
-The repo already exports `uploadToBulletin(account, bytes)` and `calculateCID(bytes)` in `src/utils.ts` — use those instead of rebuilding.
+`checkAuthorization` from the same package does a pre-flight check that the
+connected account is allowed to store on Bulletin. If the account has no
+Bulletin allowance, the fallback is the **host-sponsored** path for small blobs:
+`getPreimageManager()` from `@parity/product-sdk-host`, then
+`preimageManager.submit(bytes)` — the host's account pays for storage.
 
 ## CID pointer flow (the Level 2 addition)
 
@@ -58,27 +68,36 @@ const CID_KEY = (addr: string) => `rps-game-cid:${addr}`;
 // On match end:
 const playerData = { games: [...existing, newGame], wins, losses, draws };
 const bytes = new TextEncoder().encode(JSON.stringify(playerData));
-const cid = await uploadToBulletin(account, bytes);
-localStorage.setItem(CID_KEY(account.h160Address), cid);
+const cid = await uploadToBulletin(bytes);
+localStorage.setItem(CID_KEY(account.address), cid);
 
 // On profile load:
-const cid = localStorage.getItem(CID_KEY(account.h160Address));
+const cid = localStorage.getItem(CID_KEY(account.address));
 if (cid) {
-    const bytes = await fetchFromGateway(cid);
+    const bytes = await fetchFromBulletin(cid);
     const data = JSON.parse(new TextDecoder().decode(bytes));
     // render profile from `data`
 }
 ```
 
-`fetchFromGateway(cid)` in `utils.ts` races all four gateways with `Promise.any` — first responder wins. Use it instead of hardcoding a single gateway URL.
-
 ## Common gotchas
 
-- **PreimageSubmit permission is per-session.** First call shows the host prompt; subsequent calls within the session reuse the grant. The repo caches granted permissions in a `Set<string>` (`_grantedPermissions`).
-- **The host owns the Bulletin connection.** You do NOT need to open `wss://paseo-bulletin-next-rpc.polkadot.io` from the SPA — `preimageManager.submit` proxies through the host's open chain client.
-- **No separate Bulletin faucet is needed** when using `preimageManager.submit` — the host's account pays storage. (Standalone `bulletin-deploy` CLI is a separate codepath that uses your own funded account; that's only for `dot deploy`, not for in-app uploads.)
-- **CIDs are deterministic.** Re-uploading identical bytes returns the same CID — useful for idempotency, but don't rely on it as a "did this upload succeed?" check; query the gateway instead.
-- **Payload size cap is around 1 MB** per preimage. History grows with each game but typically stays small; no need to paginate at this level.
+- **`store()` needs a connected account.** The lazy signer resolves
+  `signerManager.getSigner()` at submit time — make sure connect has succeeded
+  (Level 1 flow) before the first upload. Dev-provider accounts outside the
+  host won't have Bulletin allowance.
+- **Reads are container-only.** `fetchBytes` routes through the host's
+  preimage subscription — it works inside Polkadot Desktop / dot.li, not in a
+  plain browser. For manual verification, paste the CID into the public IPFS
+  gateway URL instead.
+- **The SDK owns chunking and CIDs.** Don't hand-roll blake2b/multihash CID
+  computation — `store()` returns the CID, and `calculateCid` is exported if
+  you need it standalone.
+- **CIDs are deterministic.** Re-uploading identical bytes returns the same CID
+  — useful for idempotency, but don't rely on it as a "did this upload
+  succeed?" check; verify via the gateway instead.
+- **First store may prompt.** Inside the host, transaction submission shows a
+  host approval prompt — design the UX around it (e.g. a "saving…" state).
 
 ## Acceptance check
 
@@ -89,5 +108,8 @@ if (cid) {
 
 - Don't add a smart contract yet — Level 3
 - Don't add multiplayer — Level 4
-- Don't import `@parity/product-sdk-bulletin` and call `BulletinClient.create()` yourself — the host's `preimageManager` is the right path for in-app uploads; `BulletinClient` is for standalone Node.js / CLI tooling
-- Don't hardcode old paseo endpoints (`asset-hub-paseo-rpc.n.dwellir.com`, `paseo-ipfs.polkadot.io`, etc.) — Paseo v1 is retired
+- Don't import `@novasamatech/host-api-wrapper` directly — `getPreimageManager()`
+  from `@parity/product-sdk-host` is the supported surface for the host-sponsored path
+- Don't open your own WS connection to Bulletin or hardcode old Paseo v1
+  endpoints (`asset-hub-paseo-rpc.n.dwellir.com`, `paseo-ipfs.polkadot.io`, …)
+  — the SDK presets own the connection

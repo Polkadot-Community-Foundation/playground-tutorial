@@ -10,13 +10,17 @@ You are helping a developer complete **Level 1: Local Challenger**.
 Read [00-overview.md](00-overview.md) first for the SDK package set and the
 critical invariants. This file is the account/signing + local-game specifics.
 
-## Starting state
+## Starting state (what's already in the repo)
 
-- Host-managed product account via `@novasamatech/host-api-wrapper`
-  (`createAccountsProvider(sandboxTransport).getProductAccount(identifier, 0)`)
-- Best-of-3 vs computer
-- Results saved in `localStorage` under key `rps-game:<h160Address>`
-- Profile card showing W/L/D, win rate, last 10 games
+- `SignerManager` from `@parity/product-sdk-signer` set up in `src/utils.ts`
+  with a `HostProvider` (product account `playground-tutorial.dot`, derivation 0)
+  and a `DevProvider` fallback
+- `App.tsx` connects on mount via
+  `signerManager.connect(isInsideContainerSync() ? "host" : "dev")` and
+  auto-selects the first account
+- Best-of-3 vs computer (`src/pages/SoloGame.tsx`)
+- Results saved in `localStorage` under key `rps-game:<ss58Address>`
+- Profile card showing W/L/D, win rate, recent games (`src/pages/MyProfile.tsx`)
 - No smart contracts, no Bulletin, no Statement Store
 
 ## Goal
@@ -27,74 +31,83 @@ trash-talk, sound). Contract/chain changes are out of scope for this level.
 
 ## Runtime requirements
 
-- **Polkadot Desktop ≥ 0.7.5** — accepts both `.dot` domains and `localhost:PORT`
-  identifiers and ships the `host-api` 0.8.x wire protocol the SDK targets.
+- **Polkadot Desktop ≥ 0.7.5** — ships the host-api 0.8.x wire protocol the
+  current SDK targets.
 - **Polkadot mobile (v2)** if signing on a paired phone.
+- Plain browser works for UI iteration via the `DevProvider` fallback (dev
+  accounts: Alice, Bob, …) — but host signing and deploy verification need
+  Polkadot Desktop.
 
 ## Packages in play
 
 Use the **latest** published versions (do not pin):
 
-- `@novasamatech/host-api-wrapper` — accounts, signer, providers, preimage, permissions
-- `@novasamatech/host-api` — host error types
-- `@parity/product-sdk` — host detection
-- `@parity/product-sdk-address` — `ss58ToH160`
-- `polkadot-api`
+- `@parity/product-sdk-signer` — `SignerManager`, `HostProvider`, `DevProvider`
+- `@parity/product-sdk-host` — `isInsideContainerSync()`
 
-The frozen `@novasamatech/product-sdk` (0.7.9-4) is no longer used — everything
-the app imported from it now comes from `@novasamatech/host-api-wrapper`.
+Do not import `@novasamatech/product-sdk` (frozen) or
+`@novasamatech/host-api-wrapper` (low-level layer the signer wraps) directly.
 
-## Account flow (`src/utils.ts` pattern)
+## Account flow (the actual `src/utils.ts` / `App.tsx` pattern)
 
 ```ts
 import {
-  createAccountsProvider, sandboxTransport, type ProductAccount,
-} from "@novasamatech/host-api-wrapper";
-import { ss58ToH160 } from "@parity/product-sdk-address";
-import { AccountId } from "polkadot-api";
+    SignerManager, HostProvider, DevProvider, type SignerState,
+} from "@parity/product-sdk-signer";
+import { isInsideContainerSync } from "@parity/product-sdk-host";
 
-// 0.8.x: createAccountsProvider takes the sandbox transport explicitly.
-const accountsProvider = createAccountsProvider(sandboxTransport);
+const PRODUCT_ID = "playground-tutorial.dot";   // update to <your-name>.dot after deploy
 
-// Identifier = window.location.host VERBATIM. The host scopes signing to this
-// exact context; appending `.dot` or extracting a label makes signing fail with
-// `permission denied {expected: 'localhost:3000', got: 'localhost:3000.dot'}`.
-const [identifier, derivationIndex] = getAppAccountId();   // [window.location.host, 0]
-const result = await accountsProvider.getProductAccount(identifier, derivationIndex);
-const { publicKey } = result.value;
-const productAccount: ProductAccount = { dotNsIdentifier: identifier, derivationIndex, publicKey };
+export const signerManager = new SignerManager({
+    dappName: "playground-tutorial",
+    createProvider: (type) => type === "host"
+        ? new HostProvider({
+              productAccount: { dotNsIdentifier: PRODUCT_ID, derivationIndex: 0 },
+          })
+        : new DevProvider(),
+});
 
-// "createTransaction" routes through the host's create-transaction RPC and
-// bypasses PJS-signer, which throws on Paseo Next v2 signed extensions
-// (AsPgas, AsRingAlias, CheckWeight, WeightReclaim).
-const signer = accountsProvider.getProductAccountSigner(productAccount, "createTransaction");
+// In App.tsx, on mount:
+const result = await signerManager.connect(isInsideContainerSync() ? "host" : "dev");
+if (result.ok && result.value.length > 0) {
+    signerManager.selectAccount(result.value[0].address);
+}
 
-const ss58 = AccountId().dec(publicKey);
-const h160Address = ss58ToH160(ss58);   // pallet-revive / contract keying
+// Everywhere else, read state (React: useSyncExternalStore via useSignerState()):
+const { status, accounts, selectedAccount, error } = signerManager.getState();
+selectedAccount?.address;       // SS58 — localStorage key, tx origin
+selectedAccount?.h160Address;   // 0x… H160 — contract keying (Level 3)
+selectedAccount?.getSigner();   // PolkadotSigner — txs (Levels 2-4)
 ```
+
+The `productAccount` option makes `HostProvider` use the host's
+product-account flow (`getProductAccount`) and pin the `createTransaction`
+signing path internally — no manual signer wiring, no `signerType` to pass.
 
 ## Common gotchas
 
-- **Login only works inside Polkadot Desktop / dot.li.** No extension or plain
-  browser fallback — the SDK is host-only by design.
-- **`signerType: "createTransaction"` is mandatory.** The default `"signPayload"`
-  goes through PJS-signer and throws on Paseo Next v2's custom signed extensions.
-- **Identifier must be `window.location.host` verbatim** — for both `localhost`
-  and `.dot`. Do NOT append `.dot` or extract a hostname label; that breaks
-  signing. (Older notes said the opposite — they predate the host change.)
-- **localStorage keys are per-account** (`rps-game:<address>`). Switching accounts
-  swaps the profile.
+- **Host login only works inside Polkadot Desktop / dot.li.** In a plain
+  browser the app falls back to `DevProvider` dev accounts — fine for UI
+  modding, useless for verifying host signing.
+- **Keep `PRODUCT_ID` consistent.** It scopes the host product account and is
+  reused by the Level 4 statement-store identity. When deploying to the
+  developer's own domain, change it to `"<their-name>.dot"`.
+- **localStorage keys are per-account** (`rps-game:<ss58Address>`). Switching
+  accounts swaps the profile.
 - **Don't prompt to add contracts/Bulletin** — that's Level 2 / Level 3.
 
 ## Ship checklist
 
-1. `npm run build:frontend` produces `dist/`
-2. `dot deploy` (or `bulletin-deploy ./dist <name>.dot`) — Paseo Next v2 bulletin
+1. `npm run build` produces `dist/`
+2. Deploy: `dot deploy` from the terminal (or `bulletin-deploy ./dist <name>.dot`);
+   in RevX, use its built-in `.dot` deploy if the environment has it enabled —
+   otherwise hand off to the DOT CLI
 3. Open `<name>.dot` inside Polkadot Desktop ≥ 0.7.5 to verify
 
 ## Do NOT
 
-- Don't reintroduce `@novasamatech/product-sdk` — it's frozen; use `host-api-wrapper`.
-- Don't append `.dot` to the identifier or extract a label — use the raw host.
-- Don't use `@parity/product-sdk-signer`'s `SignerManager` — it calls
-  `getLegacyAccounts()` which the new desktop/android hosts reject.
+- Don't reintroduce `@novasamatech/product-sdk` or import
+  `@novasamatech/host-api-wrapper` directly — the `@parity/product-sdk-*`
+  packages are the supported surface.
+- Don't build signers by hand or pass a `signerType` — `HostProvider` handles it.
+- Don't pin SDK versions — install `@latest`.
