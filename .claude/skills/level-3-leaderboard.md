@@ -187,30 +187,41 @@ and **no** target-hash key (`acc2c3b5…`) — those were the old shape.
 
 ## Frontend integration
 
-`src/utils.ts` lazy-inits the contract on first method call (holding a chain
-follow open at startup starves Bulletin preimage submits). The init **must map
-the account before resolving live addresses** — `fromLiveClient` immediately
-queries the registry, and an unmapped origin fails with `AccountUnmapped`:
+Add the contract layer to `src/utils.ts`, lazy-initing it on first method call
+(holding a chain follow open at startup starves Bulletin submits). The account
+comes from the Level 1 `SignerManager` state
+(`const account = signerManager.getState().selectedAccount`) — `account.address`
+is the SS58 origin, `account.getSigner()` the signer, `account.h160Address` the
+contract key. The init **must map the account before resolving live addresses**
+— `fromLiveClient` immediately queries the registry, and an unmapped origin
+fails with `AccountUnmapped`:
 
 ```ts
+import { createChainClient } from "@parity/product-sdk-chain-client";
 import {
   ContractManager, createContractRuntimeFromClient, ensureContractAccountMapped,
 } from "@parity/product-sdk-contracts";
 import { paseo_asset_hub } from "@parity/product-sdk-descriptors/paseo-asset-hub";
+import cdmJson from "../cdm.json";
+
+// Create the chain client lazily, once, and reuse it. `client` below is the
+// raw PolkadotClient for Asset Hub.
+const chainClient = await createChainClient({ chains: { assetHub: paseo_asset_hub } });
+const client = chainClient.raw.assetHub;
 
 await client.getChainSpecData();
 await client.getBestBlocks();           // wake the chain follow first
 
 // 1. map the connected product account (plain runtime, no registry query)
 const initRuntime = createContractRuntimeFromClient(client, paseo_asset_hub);
-await ensureContractAccountMapped(initRuntime, account.address, account.signer);
+await ensureContractAccountMapped(initRuntime, account.address, account.getSigner());
 
 // 2. NOW resolve live addresses from the registry
 const manager = await ContractManager.fromLiveClient(
   cdmJson, client, paseo_asset_hub,
   {
     defaultOrigin:  account.address,
-    defaultSigner:  account.signer,
+    defaultSigner:  account.getSigner(),
     registryOrigin: account.address,        // also a query origin → must be mapped
     libraries: ["@rps/leaderboard"],
   },
@@ -218,15 +229,16 @@ const manager = await ContractManager.fromLiveClient(
 const lb = manager.getContract("@rps/leaderboard");
 
 // queries return { success, value, gasRequired }; pass 0x… hex for address args
-const res = await lb.getPlayerCid.query(asAddress(account));
+const res = await lb.getPlayerCid.query(account.h160Address);
 await lb.register.tx();                                   // returns Result<u64, Error>
 await lb.updateResult.tx(newCid, BigInt(pointsDelta));    // returns Result<(), Error>
 ```
 
-`asAddress(hexOrAccount)` returns a `0x…` H160 string (the encoder accepts it
-for the `address` type). Don't build `Binary`/`FixedSizeBinary` — cross-realm
-class identity breaks when substrate-bindings hoists multiple copies.
-`asBytes20` is kept as a deprecated alias.
+Pass the `0x…` H160 string (`account.h160Address`) for `address` args — the
+encoder accepts it directly. Don't build `Binary`/`FixedSizeBinary` —
+cross-realm class identity breaks when substrate-bindings hoists multiple
+copies. (`ContractManager` also accepts a `signerManager` option instead of
+`defaultOrigin`/`defaultSigner` if you prefer to hand it the manager.)
 
 ## Common gotchas
 
@@ -236,17 +248,16 @@ class identity breaks when substrate-bindings hoists multiple copies.
   confirm it's mapping (not a missing registration), a mapped origin returns
   `{ success: true, value: { isSome: true, value: "0x…" } }` while an unmapped
   one returns `success: false → Revive::AccountUnmapped`.
-- **`permission denied {expected: 'localhost:3000', got: '...dot'}`** = the
-  product identifier diverged from the host context. Use `window.location.host`
-  verbatim (invariant #1 in the overview).
-- **`PJS does not support this signed-extension`** = signer built without
-  `"createTransaction"`.
+- **`PJS does not support this signed-extension: AsPgas`** = the tx was signed
+  outside the host product-account flow. Use `account.getSigner()` from the
+  Level 1 `SignerManager` (its `HostProvider` pins the `createTransaction`
+  path internally) — never wire a signer by hand.
 - **`DuplicateContract`** on re-deploy is harmless (deterministic address).
 - **`Invalid::Payment`** = the deployer needs PAS (Asset Hub for the contract,
   Bulletin allowance for the metadata upload).
-- **H160 vs SS58**: the contract keys by H160 (`account.h160Address`); SS58
-  (`account.address`) is only for origin/signing. Use `ss58ToH160` — don't roll
-  your own keccak.
+- **H160 vs SS58**: the contract keys by H160 (`account.h160Address`, provided
+  by `SignerAccount`); SS58 (`account.address`) is only for origin/signing.
+  Don't roll your own keccak.
 - **Points are `i64`** (losses subtract). **`register()` once per player** before
   any `update_result()` — check `isRegistered()` and auto-register on first save.
 

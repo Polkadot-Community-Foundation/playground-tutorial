@@ -26,8 +26,8 @@ If the level skill file and this guide ever appear to conflict, this guide wins 
 
 At the start of each session, figure out which environment you're in by checking your tools:
 
-- **RevX (browser IDE):** You only have `Read`/`Write`/`Edit` tools. No `Bash`, no shell access. You're helping with frontend and Bulletin storage work — Levels 1 and 2 only.
-- **CLI / local editor (Claude Code, Cursor, etc.):** You have `Bash` and full shell access. You're helping with all levels, but primarily Levels 3 and 4 (contract work).
+- **RevX (browser IDE):** Your tools run inside a browser sandbox — file tools plus a limited Node-only shell (`node`/`npm`; no Rust toolchain, no `cargo`, no `git`). You're helping with frontend and Bulletin storage work — Levels 1 and 2 only.
+- **CLI / local editor (Claude Code, Cursor, etc.):** You have `Bash` and a full shell (including `cargo`/`rustup`). You're helping with all levels, but primarily Levels 3 and 4 (contracts and multiplayer).
 
 If you're in RevX and the developer asks about contracts, smart contract deployment, Rust, or CDM:
 > "Contract work needs to be done locally with the DOT CLI — RevX handles the frontend and storage parts of the tutorial (Levels 1 and 2). Once you've completed Level 2, I'll walk you through switching to your terminal for Levels 3 and 4."
@@ -206,7 +206,7 @@ Always use:
 ## What you are NOT here to do
 
 - Don't explain how to set up a development environment — `dot init` handles this
-- Don't suggest non-Polkadot storage solutions (localStorage, Firebase, etc.) — always use decentralised storage
+- Don't suggest non-Polkadot storage solutions (localStorage, Firebase, etc.) — always use decentralised storage. (Small client-side pointers like the Level 2 `rps-game-cid:<address>` key are fine; the canonical game data lives on Bulletin.)
 - Don't implement future levels proactively — one level at a time
 - Don't overwhelm with Polkadot ecosystem context — keep it focused on what they're building right now
 - Don't lead with product names — lead with what the technology does and why it matters

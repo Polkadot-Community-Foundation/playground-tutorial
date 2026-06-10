@@ -16,10 +16,11 @@ Two accounts play a real-time best-of-3 over Statement Store using commit-reveal
 ## Dependency
 
 `@parity/product-sdk-statement-store` (latest — do not pin). Host mode required —
-same host the Level 1 signer goes through. Builds on `@novasamatech/host-api-wrapper`
-+ Polkadot Desktop ≥ 0.7.5. The `StatementStoreClient` API (constructor config,
-`connect`/`publish`/`subscribe`/`destroy`, `ReceivedStatement.data`) is stable
-across recent versions, so a fresh install on latest needs no code change.
+same host connection the Level 1 `SignerManager` goes through, inside
+Polkadot Desktop ≥ 0.7.5. The examples below match the current published API
+(constructor config, `connect`/`publish`/`subscribe`/`destroy`,
+`ReceivedStatement.data`); if a newer release changes it, trust the installed
+package types over these notes.
 
 ## Connection pattern (current SDK)
 
@@ -33,14 +34,15 @@ const client = new StatementStoreClient({
 
 await client.connect({
     mode: "host",
-    accountId: account.productAccountId,    // [identifier, derivationIndex] tuple — see utils.ts
+    accountId: [account.address, 42],   // [ss58Address, chainPrefix]
 });
 ```
 
-`account.productAccountId` is `[window.location.host, derivationIndex]`, set up in
-`utils.ts` from `getProductIdentifier()`. Don't pass a literal like
-`["rps-game.dot", 0]` — the identifier is the raw host and must match what the
-host signed off on at account creation (same invariant as the Level 1 signer).
+`accountId` is an `[ss58Address, chainPrefix]` tuple — the connected account's
+SS58 address from the Level 1 `SignerManager` (`selectedAccount.address`,
+generic prefix 42 by default). In host mode, statement proof creation is
+delegated to the host, so the account must be the host product account from
+Level 1 — `DevProvider` accounts outside the host can't create proofs.
 
 ## Publish / subscribe
 
@@ -62,14 +64,16 @@ await client.publish<JoinMessage>(
 client.destroy();
 ```
 
-## Channels (all scoped via `topic2: roomCode`)
+## Message kinds within a room (all published with `topic2: roomCode`)
 
 ```text
-{roomCode}/presence/{peerId}        — join announcement
-{roomCode}/commit/{round}/{peerId}  — SHA-256 hash of (move + salt)
-{roomCode}/reveal/{round}/{peerId}  — move + salt revealed after both commits
+join    — { type: "join",   peerId, ts }                    — presence announcement
+commit  — { type: "commit", round, peerId, hash, ts }       — SHA-256 of (move + salt)
+reveal  — { type: "reveal", round, peerId, move, salt, ts } — revealed after both commits
 ```
 
+The kind/round/peerId live **in the payload**, not in topics — subscribers get
+every statement in the room and dispatch on `statement.data.type`.
 Topic1 (app-level) is derived from `appName: "rps-game"` automatically — you don't set it manually.
 
 ## Commit-reveal protocol per round
@@ -85,14 +89,14 @@ Topic1 (app-level) is derived from `appName: "rps-game"` automatically — you d
 ## Common gotchas
 
 - **Host mode required** — public WebSocket endpoints to Bulletin do **not** expose `statement_*` RPC methods. The client routes through the host's native binary protocol (`createStatementStore()` under the hood). Must run inside Polkadot Desktop.
-- **StatementSubmit permission is per-session** — first `publish()` triggers the host prompt. The repo's `ensurePermission("StatementSubmit")` helper caches the grant. If you instantiate the client inside a component, the first publish may show a permission modal — design the UX around that.
-- **Stale closures are the #1 multiplayer bug.** `handleMessage` runs inside a subscribe callback that captures state at subscription time. Use `useRef` for `myMove`, `mySalt`, `opponentCommit`, `round`, `phase`. Update refs synchronously alongside `setState`. The repo's `MultiplayerGame.tsx` shows the right pattern.
+- **StatementSubmit permission is per-session** — first `publish()` triggers the host prompt; subsequent publishes in the session reuse the grant. If you instantiate the client inside a component, the first publish may show a permission modal — design the UX around that.
+- **Stale closures are the #1 multiplayer bug.** `handleMessage` runs inside a subscribe callback that captures state at subscription time. In the multiplayer component you create for this level, use `useRef` for `myMove`, `mySalt`, `opponentCommit`, `round`, `phase`. Update refs synchronously alongside `setState`.
 - **Skip own messages.** Subscribe receives everyone's statements including your own. Filter on `statement.data.peerId === account.h160Address`.
-- **Deduplication.** Subscribe may replay a statement during reconnect or poll. v0.2.3 has internal `seen` dedup but you can also dedup by `{type, round, peerId, timestamp}` for safety.
+- **Deduplication.** Subscribe may replay a statement during reconnect or poll. The client dedups internally, but you can also dedup by `{type, round, peerId, timestamp}` for safety.
 - **Phase machine:** `connecting → pick → waiting-commit → waiting-reveal → round-result → (pick | game-over)`. Transitions must be atomic; never allow two reveals for the same round.
 - **Hash mismatch = abort.** If opponent's SHA256 doesn't match their earlier commit, don't process the round — treat as cheat attempt.
 - **After match ends, save once.** Reuse the Level 2 `uploadToBulletin` + Level 3 `lb.updateResult.tx(...)` flow. Both players save independently to their own Bulletin CID + contract entry. Both must already have called `ensureContractAccountMapped` (Level 3) — if a player is first-time, expect a one-time `Revive.map_account()` signature prompt before the leaderboard tx.
-- **`createTransaction` signerType propagates here too.** The Statement Store client uses `account.signer` under the hood for the SCALE-signed statements — that signer must be the one built with `signerType: "createTransaction"` (see [level-1](level-1-local-challenger.md)). If it was built with the default `"signPayload"`, the host will reject the statement-submit tx with `PJS does not support this signed-extension: AsPgas` on Paseo Next v2.
+- **Signing is the Level 1 signer's job.** Statement proofs are created by the host in host mode, and any follow-up txs use `account.getSigner()` from `SignerManager` — never build a signer by hand. If you see `PJS does not support this signed-extension: AsPgas`, the tx bypassed the host product-account flow.
 
 ## Channel store helper (if used)
 
@@ -118,7 +122,7 @@ Skip if you don't need it — the raw `publish` / `subscribe` flow above is enou
 
 ## Do NOT
 
-- Don't use `@novasamatech/sdk-statement` directly — `@parity/product-sdk-statement-store` wraps it and gives you typed publish/subscribe + host-transport routing. Going lower-level loses the type safety and the dedup.
+- Don't go lower-level than `@parity/product-sdk-statement-store` (e.g. `@novasamatech/host-api-wrapper`'s raw statement store) — the client gives you typed publish/subscribe, host-transport routing, and dedup.
 - Don't connect with `mode: "local"` — local mode hits the public WS endpoint which doesn't serve `statement_*` methods. Always `mode: "host"`.
-- Don't hardcode room codes — use a 6-char random generator with a confusable-free alphabet (`ABCDEFGHJKLMNPQRSTUVWXYZ23456789`). The repo exports `generateRoomCode()` in `utils.ts`.
+- Don't hardcode room codes — use a 6-char random generator with a confusable-free alphabet (`ABCDEFGHJKLMNPQRSTUVWXYZ23456789`). Add a `generateRoomCode()` helper to `utils.ts`.
 - Don't share one `StatementStoreClient` instance across rooms — `destroy()` it when the room ends and create a new one for the next match. Subscriptions are scoped to the client.
