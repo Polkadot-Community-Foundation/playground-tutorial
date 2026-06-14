@@ -54,7 +54,7 @@ env:
   # source at a pinned commit. Bump REF as the fork advances; the only hard
   # requirement is that its cdm-env stays >= 2.1.0 (w3s address populated).
   PLAYGROUND_CLI_REPO: Polkadot-Community-Foundation/playground-cli
-  PLAYGROUND_CLI_REF: 9bc441548c6915fe612d031b83684797f3e6c2a0
+  PLAYGROUND_CLI_REF: b41feccf9b42334a6d7366a72019896196d48a13
 
 jobs:
   deploy:
@@ -132,8 +132,8 @@ jobs:
           set -euo pipefail
           PUBLISH_FLAGS="--playground --moddable --tag $PLAYGROUND_TAG"
           if [ "$PUBLISH" = "no" ]; then
-            # isFullySpecified still needs a boolean playground flag -> --no-playground.
-            PUBLISH_FLAGS="--no-playground"
+            # host-only (no registry publish): --yes forces headless (b41fecc+).
+            PUBLISH_FLAGS="--yes"
           fi
           "$RUNNER_TEMP/playground" deploy \
             --env summit \
