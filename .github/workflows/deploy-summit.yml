@@ -112,7 +112,13 @@ jobs:
       - name: Build playground CLI binary
         working-directory: .playground-cli
         run: |
-          pnpm install --frozen-lockfile
+          # NOT --frozen-lockfile: the fork's committed pnpm-lock.yaml lags its
+          # package.json (the cdm-env repoint to @polkadot-community-foundation
+          # @^2.1.0 didn't regenerate the lock). package.json still pins ^2.1.0,
+          # so cdm-env still resolves w3s; the Sanity step below proves it.
+          # Follow-up: regenerate pnpm-lock.yaml in the playground-cli fork, then
+          # bump PLAYGROUND_CLI_REF and restore --frozen-lockfile here.
+          pnpm install --no-frozen-lockfile
           # Compile a self-contained binary (bundles deps incl. cdm-env w3s).
           bun build --compile src/index.ts --outfile "$RUNNER_TEMP/playground"
           "$RUNNER_TEMP/playground" --version
