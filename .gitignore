@@ -20,3 +20,9 @@ package-lock.json
 # developer is on across sessions (deploys happen outside the session, so it can't be
 # inferred from code alone). Per-developer; must never be committed into a deploy.
 .tutorial-progress.json
+
+# @parity/product-sdk skills — fetched by ./setup.sh into .claude/skills/ as
+# subdirectories (kept fresh, never stale). The tutorial's own level guides
+# (00-overview.md, level-N-*.md) are flat .md FILES and ARE committed, so only
+# ignore the fetched subdirectories — not the whole skills dir.
+.claude/skills/*/

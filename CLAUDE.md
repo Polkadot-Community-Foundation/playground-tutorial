@@ -30,11 +30,19 @@
 
 ---
 
+## Session setup — `./setup.sh`
+
+Before changing code, this repo expects `./setup.sh` to have run: it installs dependencies and fetches the `@parity/product-sdk` skills into `.claude/skills/` (per-package SDK reference, *alongside* the tutorial's committed `level-N-*.md` guides — the fetched skills are gitignored subdirectories, kept fresh). In Claude Code it runs automatically via the `SessionStart` hook in `.claude/settings.json`; if you're another tool, run it yourself at the start of the session (it's a fast no-op when already set up; skips gracefully offline or where there's no shell, e.g. RevX). The tutorial's own level guides are always present regardless.
+
+---
+
 ## Detecting which level they're on
 
-**Never decide the level by eyeballing the repo or asking "does this look fresh?".** Each level ends with a deploy the developer runs *outside this session* (they exit to a terminal or the host and run `dot deploy` / `pg deploy`), so a completed level leaves no obvious trace — a finished, deployed Level 1 looks almost identical to a clean checkout. Decide from two signals, in this order, then reconcile:
+**Never decide the level by eyeballing the repo or asking "does this look fresh?".** Each level ends with a deploy the developer runs *outside this session*, so a completed level leaves no obvious trace.
 
-**1. The progress marker — `.tutorial-progress.json` at the repo root.** You own this file; it is gitignored so it never gets committed into the developer's deploy. If it exists, its `current_level` is the source of truth for *deploy* state (the thing code can't tell you). Shape:
+> **The marker is the only reliable signal.** `pg mod` checkouts are a fresh `git` repo with no commits and no `origin`, so `git diff` *fatals* — there's no baseline to detect a Level-1 mod against (the moddable source already *is* the Level-1 start, so the mod is invisible). **Code can't tell you whether Level 1 was done — only the marker can.** Treat it as primary, keep it current (write it eagerly — see below), and don't rely on git-diff.
+
+**1. The progress marker — `.tutorial-progress.json` at the repo root (PRIMARY).** You own this file. If it exists, it is the source of truth for which level they're on. Shape:
 
 ```json
 {
@@ -46,38 +54,46 @@
 }
 ```
 
-`status` is one of `in-progress`, `ready-to-deploy`, or `deployed`. Read it first; if it's missing, fall through to the code diff. **In RevX the workspace is an in-browser WebContainer and this file lives in IndexedDB, so it is best-effort — it may not survive a new session, a different browser, or a long gap. Treat a missing marker as "unknown", not "fresh".**
+`status` is one of `in-progress`, `ready-to-deploy`, or `deployed`. Read it **first**; if present, trust it. (In RevX the marker lives in the in-browser WebContainer's IndexedDB, so it's best-effort there — may not survive a new browser/session. Treat a missing marker as "unknown", not "fresh".)
 
-**2. Which level's code is present.** The starting checkout *is* the Level 1 baseline; each level leaves unmistakable code, so the **highest** marker present tells you how far they've built. *How* you check depends on the environment:
-- **`git` available (Claude Code / Cursor / local):** `git diff --stat origin/main` (or `HEAD` on a fresh clone) against the pristine commit.
-- **No `git` (RevX WebContainer — `git` is not in the harness):** there's no baseline to diff, so **read the source directly and grep for the markers** (open `src/utils.ts` / `package.json` and search for `CloudStorageClient`, the `rps-game-cid:` key, etc.). Without a baseline you can't distinguish a *modified* `src/` from a pristine one — so for Level-1 deploy state lean on the marker file, and if it's absent, **ask** (see the reconcile rule below).
+**2. Which level's *code* is present (SUPPLEMENT — only ever bumps you UP).** Some levels leave unmistakable code; if you see it, they're at least that far regardless of the marker. Read the source directly and look for these (open `src/utils.ts` / `package.json` — `git` is irrelevant here, the files are right there; ignore `dist/`, `dist*.car`, lockfiles):
 
-| What you find (look in `src/`, `package.json`, contract sources — **ignore `dist/`, `dist*.car`, lockfiles**) | They are at least on |
+| What you find in `src/` / `package.json` / contract sources | They are at least on |
 |---|---|
-| no changes to `src/` | Level 1, not started |
-| any `src/` mod (theming, game logic, or `PRODUCT_ID` changed to `<name>.dot`) but none of the markers below | Level 1 (modding, or done) |
 | `@parity/product-sdk-cloud-storage`, `CloudStorageClient`, or the `rps-game-cid:` key | Level 2 |
 | `@parity/product-sdk-contracts`, `ContractManager`, `ensureContractAccountMapped`, a contract source, or `cdm.json` | Level 3 |
 | `@parity/product-sdk-statement-store`, `StatementStoreClient`, or `ChannelStore` | Level 4 |
 
-**Reconcile the two.** Code wins on *what's built*; the marker wins on *whether the out-of-band deploy happened*. Take the highest level either signal supports:
+There is deliberately **no Level-1 row** — Level-1 mods can't be detected from code (see the box above). Level 1 vs "fresh Level 1" is *only* answerable from the marker.
 
-- Code shows Level 3 markers but the marker file says `level-2` → they're on **Level 3**; update the marker.
-- `src/` is modded but there's **no** marker file → they've at least *started* Level 1. **Do not reintroduce Level 1 as if it were fresh.** Ask once: "Looks like you've already started modding — have you deployed your Level 1 version yet, or still working on it?" and write the marker from their answer.
-- Only default to **"Level 1, fresh start"** when the diff is clean **and** there is no marker file.
+**Reconcile.** Take the **highest** level either signal supports:
+- Marker says `level-2` but Level-3 code is present → they're on **Level 3**; bump the marker.
+- Marker present → trust it; never re-detect a fresh start over a marker that says otherwise.
+- **No marker, and no Level-2+ code** → you genuinely cannot tell "fresh" from "did Level 1 already". **Do not assert "fresh Level 1".** Ask once: "Have you already deployed your Level 1 version, or are you just getting started?" — then **immediately write the marker** from their answer so you never ask again.
 
-**After you've confirmed the level, write/update `.tutorial-progress.json`** so the next session starts in the right place instead of re-detecting from scratch.
+**Then write/update `.tutorial-progress.json`** so the next session resumes instead of re-detecting.
+
+### Keep the marker current — write it EAGERLY, not just at deploy
+
+The marker only helps if it's already there when the developer reopens — and they reopen constantly, because every deploy sends them out of the session. **Do not wait for the deploy hand-off to write it.** Write or update `.tutorial-progress.json` at each of these moments, the instant they happen:
+
+- **The moment you make the first change of a level** (e.g. you just edited the CSS for a Level 1 mod): write `{ "current_level": N, "levels": { "level-N": { "status": "in-progress" } } }`. This is the write the old guide missed — without it, a developer who mods, then exits to deploy, comes back to a blank slate.
+- **At the deploy hand-off:** set that level's status to `ready-to-deploy`.
+- **When they confirm the deploy on return:** set it to `deployed` (record the `domain` if you know it) and bump `current_level` to the next level.
+- **Whenever you detect Level-2+ code or resolve an ambiguity by asking:** write the result straight away.
+
+A stale or missing marker is the failure mode that breaks navigation — err toward writing it more often, not less. It's a tiny local JSON file; rewriting it is free.
 
 ---
 
 ## The deploy hand-off — deploys happen *outside* this session
 
-Every level ends with a deploy the developer runs themselves, in their terminal or the host (`dot deploy` / `pg deploy`) — **you do not see it happen, and they often close this session to do it.** So you must close out the build *before* they leave, not after. When a level's build goal is met and they're ready to deploy:
+Every level ends with a deploy the developer runs themselves, in their terminal or the host (`pg deploy` — the playground CLI; `pg` is the short alias for `playground`) — **you do not see it happen, and they often close this session to do it.** So you must close out the build *before* they leave, not after. When a level's build goal is met and they're ready to deploy:
 
 1. Give that level's **"make progress explicit"** blurb (it names the next level and the remaining count — see ["The 4 levels"](#the-4-levels)).
 2. **Tell them the deploy runs outside this chat, and to come back here afterwards and say "deployed" — that's where the next level begins.** For example:
    > "Run the deploy from your terminal, then **come back here and tell me it's live** — I'll kick off Level 2 from there. Don't stop at the first deploy; that's 1 of 4."
-3. **Write `.tutorial-progress.json`** marking this level `ready-to-deploy` (then `deployed`, with the domain, once they confirm on return). If they close the session mid-deploy, the next session still knows where they are.
+3. **Update `.tutorial-progress.json`** to `ready-to-deploy` (you should already have written `in-progress` when the build work started — see ["Keep the marker current"](#keep-the-marker-current--write-it-eagerly)), then `deployed` with the domain once they confirm on return. If they close the session mid-deploy, the next session still knows where they are.
 
 **Never assume the deploy happened just because you gave the instructions.** Wait for them to confirm on return, then advance to the next level. This is the moment the old guide missed: it told you what to say *after* a deploy you were present for, but the deploy is a hand-off out of the tool — so the "come back for the next level" prompt has to come *before* they leave.
 
@@ -113,16 +129,16 @@ At the start of each session, figure out which environment you're in by checking
 - **CLI / local editor (Claude Code, Cursor, etc.):** You have `Bash` and a full shell (including `cargo`/`rustup`). You're helping with all levels, but primarily Levels 3 and 4 (contracts and multiplayer).
 
 If you're in RevX and the developer asks about contracts, smart contract deployment, Rust, or CDM:
-> "Contract work needs to be done locally with the DOT CLI — RevX handles the frontend and storage parts of the tutorial (Levels 1 and 2). Once you've completed Level 2, I'll walk you through switching to your terminal for Levels 3 and 4."
+> "Contract work needs to be done locally with the playground CLI (`pg`) — RevX handles the frontend and storage parts of the tutorial (Levels 1 and 2). Once you've completed Level 2, I'll walk you through switching to your terminal for Levels 3 and 4."
 
 ## The handoff from RevX to CLI (after Level 2)
 
 When Level 2 is complete in RevX, tell the developer:
-> "Level 2 done — your game results now live permanently on a decentralised network. The next two levels involve smart contracts, which need to be built locally. You'll need the DOT CLI for this:
+> "Level 2 done — your game results now live permanently on a decentralised network. The next two levels involve smart contracts, which need to be built locally. You'll need the playground CLI (`pg`, full name `playground`) for this:
 >
 > 1. Open your terminal
-> 2. Run `dot init` to sign in (or skip if you're already signed in)
-> 3. Run `dot mod stadium.dot` to get the source on your machine
+> 2. Run `pg login` to sign in (or skip if you're already signed in)
+> 3. Run `pg mod stadium.dot` to get the source on your machine
 > 4. Open this project in your editor or Claude Code — your AI assistant will guide you through Levels 3 and 4 from there"
 
 ---
@@ -304,7 +320,7 @@ Always use:
 
 ## What you are NOT here to do
 
-- Don't explain how to set up a development environment — `dot init` handles this
+- Don't explain how to set up a development environment — `./setup.sh` (deps + skills) and `pg login` (sign-in) handle this
 - Don't suggest non-Polkadot storage solutions (localStorage, Firebase, etc.) — always use decentralised storage. (Small client-side pointers like the Level 2 `rps-game-cid:<address>` key are fine; the canonical game data lives on Bulletin.)
 - Don't implement future levels proactively — one level at a time
 - Don't overwhelm with Polkadot ecosystem context — keep it focused on what they're building right now

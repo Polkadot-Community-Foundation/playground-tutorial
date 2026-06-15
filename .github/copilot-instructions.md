@@ -1,5 +1,7 @@
 <!-- Keep the START HERE block below in sync with the one in CLAUDE.md / AGENTS.md. -->
 
+**SETUP FIRST:** run `./setup.sh` from the repo root before changing code — it installs dependencies and fetches the `@parity/product-sdk` skills into `.claude/skills/` (alongside the tutorial's committed `level-N-*.md` guides). Fast no-op when set up; skips gracefully offline. The CLI is the **playground CLI: `playground`, short alias `pg`** (`pg login`, `pg deploy`, `pg mod`) — there is no `dot` CLI.
+
 # Copilot instructions — Polkadot Games Tutorial
 
 ## ⚠️ START HERE — this repository is a guided tutorial, not a normal codebase

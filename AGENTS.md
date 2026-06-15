@@ -1,5 +1,9 @@
 # AGENTS.md — instructions for any AI coding agent
 
+**SETUP FIRST (where you have a shell):** run `./setup.sh` from the repo root before changing code — it installs dependencies and fetches the `@parity/product-sdk` skills into `.claude/skills/` (alongside the tutorial's committed `level-N-*.md` guides). Fast no-op when already set up; skips gracefully offline. In the RevX WebContainer there's no shell to run it — its SDK skills are provided by the host, and the tutorial's level guides are committed, so carry on. Don't begin the task until setup has run (or you've confirmed it can't).
+
+**The CLI is the playground CLI: `playground`, with `pg` as the short alias** (same binary) — `pg login`, `pg deploy`, `pg mod`. There is no `dot` CLI.
+
 <!-- Keep the START HERE block below in sync with the one in CLAUDE.md. -->
 
 ## ⚠️ START HERE — this repository is a guided tutorial, not a normal codebase
@@ -33,36 +37,43 @@ No matter how the developer opens — `start tutorial`, `mod this app`, `edit th
 
 ## Detecting which level they're on
 
-**Decide by detection, never by eyeballing the repo.** Each level ends with a deploy the developer runs *outside this session* (in RevX, the built-in `.dot` deploy; locally, `dot deploy` / `pg deploy`), so a finished level leaves no obvious trace — a deployed Level 1 looks almost like a clean checkout. Use two signals, then reconcile:
+**Decide by the marker, not by eyeballing the repo.** Each level ends with a deploy the developer runs *outside this session*, so a finished level leaves no obvious trace.
 
-**1. The progress marker — `.tutorial-progress.json` at the repo root.** You own this file. If it exists, its `current_level` is the source of truth for *deploy* state (the thing code can't tell you):
+> **The marker is the only reliable signal.** `pg mod` checkouts are a fresh `git` repo with no commits and no `origin`, so `git diff` *fatals* — there's no baseline to detect a Level-1 mod against (the moddable source already *is* the Level-1 start, so the mod is invisible). **Code can't tell you whether Level 1 was done — only the marker can.** Treat it as primary, keep it current (write it eagerly — see below), and don't rely on git-diff.
+
+**1. The progress marker — `.tutorial-progress.json` at the repo root (PRIMARY).** If it exists, it is the source of truth for which level they're on:
 
 ```json
 { "track": "rock-paper-scissors", "current_level": 2,
   "levels": { "level-1": { "status": "deployed", "domain": "rockpaper01.dot" } } }
 ```
 
-`status` ∈ `in-progress` | `ready-to-deploy` | `deployed`. **In RevX this file lives in the in-browser workspace (IndexedDB), so it is best-effort — it may not survive a new session, a different browser, or a gap longer than the auto-restore window. Treat a missing marker as "unknown", not "fresh".**
+`status` ∈ `in-progress` | `ready-to-deploy` | `deployed`. Read it **first** and trust it. (In RevX it lives in IndexedDB, so it's best-effort there; treat a missing marker as "unknown", not "fresh".)
 
-**2. Which level's code is present.** The starting checkout is the Level 1 baseline; each level adds unmistakable code. Detect the **highest** level whose markers appear — that's how far they've built:
+**2. Which level's code is present (SUPPLEMENT — only bumps you UP).** Read the source directly and look for these — `git` is irrelevant, the files are right there (ignore `dist/`, `dist*.car`, lockfiles):
 
-| Marker found in `src/` / `package.json` / contract sources | At least on |
+| Found in `src/` / `package.json` / contract sources | At least on |
 |---|---|
-| no modification to `src/` at all | Level 1, not started |
-| any `src/` mod (theming, game logic, `PRODUCT_ID` changed to `<name>.dot`) but none below | Level 1 (modding, or done) |
 | `@parity/product-sdk-cloud-storage`, `CloudStorageClient`, or the `rps-game-cid:` key | Level 2 |
 | `@parity/product-sdk-contracts`, `ContractManager`, `ensureContractAccountMapped`, a contract source, or `cdm.json` | Level 3 |
 | `@parity/product-sdk-statement-store`, `StatementStoreClient`, or `ChannelStore` | Level 4 |
 
-**How to read signal 2 depends on your environment:**
-- **`git` available (Claude Code / Cursor / local):** `git diff --stat origin/main` (or `HEAD` on a fresh clone) — the pristine commit is the baseline. Ignore `dist/`, `dist*.car`, and lockfiles.
-- **No `git` (RevX WebContainer):** there is no baseline to diff against — `git` is not in the harness. Instead **read the source directly and grep for the markers above** (e.g. open `src/utils.ts` / `package.json` and search for `CloudStorageClient`, `@parity/product-sdk-cloud-storage`, the `rps-game-cid:` key, etc.). Presence-of-code detection only needs to open files, which RevX can do. Note that without a baseline you cannot tell a *modified* `src/` from a pristine one for Level 1 — so for Level-1 deploy state lean on the marker file, and if it's absent, **ask** (next paragraph).
+There is deliberately **no Level-1 row** — Level-1 mods can't be detected from code (see the box). Level 1 vs "fresh Level 1" is *only* answerable from the marker.
 
-**Reconcile.** Code wins on *what's built*; the marker wins on *whether the out-of-band deploy happened*. Take the highest level either supports. If `src/` shows Level-2+ code, use that regardless of the marker (and update the marker). If you cannot establish Level-1 deploy state — no marker, and (in RevX) no baseline to prove the code is modded — **do not reintroduce Level 1 as if fresh; ask once:** "Have you already deployed your Level 1 version, or are you still working on it?" and write the marker from their answer. Only default to "Level 1, fresh start" when nothing points further. **After confirming, write/update `.tutorial-progress.json`** so the next session resumes correctly.
+**Reconcile.** Take the **highest** level either supports. Marker present → trust it; never re-detect a fresh start over it. Level-2+ code present → use that and bump the marker. **No marker AND no Level-2+ code → you cannot tell "fresh" from "did Level 1 already"; do NOT assert "fresh Level 1" — ask once:** "Have you already deployed your Level 1 version, or are you just getting started?" then write the marker immediately.
+
+### Keep the marker current — write it EAGERLY, not just at deploy
+
+The marker only helps if it's there when the developer reopens — and they reopen after every deploy. So **don't wait for the deploy hand-off.** Write/update `.tutorial-progress.json` the instant each happens:
+- **First change of a level** (e.g. you just edited the CSS for a Level 1 mod) → `{ "current_level": N, "levels": { "level-N": { "status": "in-progress" } } }`. This is the write that was missing — without it, mod-then-exit-to-deploy comes back to a blank slate.
+- **Deploy hand-off** → `ready-to-deploy`. **Deploy confirmed on return** → `deployed` (+ `domain`), bump `current_level`.
+- **Detected Level-2+ code, or resolved an ambiguity by asking** → write it straight away.
+
+A stale/missing marker is *the* thing that breaks navigation — err toward writing it more often.
 
 ## The deploy hand-off — deploys happen *outside* this session
 
-Each level ends with a deploy the developer runs themselves (RevX's built-in deploy, or `dot deploy` / `pg deploy` in a terminal). **You do not see it happen, and they often leave the session to do it.** So close out the build *before* they go:
+Each level ends with a deploy the developer runs themselves (RevX's built-in deploy, or `pg deploy` in a terminal). **You do not see it happen, and they often leave the session to do it.** So close out the build *before* they go:
 
 1. Give that level's "make progress explicit" blurb (names the next level and the remaining count — see `CLAUDE.md` → "The 4 levels", which is the longer reference).
 2. **Tell them the deploy runs outside this chat, and to come back afterwards and say "deployed" — that's where the next level starts.** e.g. "Run the deploy, then come back and tell me it's live — I'll kick off Level 2. Don't stop at the first deploy; that's 1 of 4."

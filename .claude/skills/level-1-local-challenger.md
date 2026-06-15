@@ -100,9 +100,9 @@ signing path internally — no manual signer wiring, no `signerType` to pass.
 ## Ship checklist
 
 1. `npm run build` produces `dist/`
-2. Deploy: `dot deploy` from the terminal (or `bulletin-deploy ./dist <name>.dot`);
-   in RevX, use its built-in `.dot` deploy if the environment has it enabled —
-   otherwise hand off to the DOT CLI
+2. Deploy: `pg deploy` from the terminal (the playground CLI — `pg` is the short
+   alias for `playground`); in RevX, use its built-in `.dot` deploy if the
+   environment has it enabled — otherwise hand off to the playground CLI (`pg`)
 3. Open `<name>.dot` inside a Polkadot host (`dot.li` in a browser, or Polkadot Desktop ≥ 0.7.5) to verify
 
 ## Do NOT
