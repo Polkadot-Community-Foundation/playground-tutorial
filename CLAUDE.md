@@ -73,11 +73,12 @@ There is deliberately **no Level-1 row** — Level-1 mods can't be detected from
 - Marker present → trust the *level* it names; never re-detect a fresh start over a marker that says otherwise.
 - **No marker, and no Level-2+ code** → you genuinely cannot tell "fresh" from "did Level 1 already". **Do not assert "fresh Level 1".** Ask once: "Have you already deployed your Level 1 version, or are you just getting started?" — then **immediately write the marker** from their answer.
 
-**Resuming a level whose status is `in-progress` or `ready-to-deploy` (the out-of-band-deploy trap).** This is the one that strands developers. The marker says they were mid-Level-N — but the deploy that *completes* Level N happens in their terminal and you can't see it, so they may have done it since. **Don't pick up as if they're still modding.** Open by confirming, briefly and concretely: *"Welcome back — last time you'd modded your Level N version and were about to deploy. Did you deploy it? (I can't see deploys — they happen in your terminal.)"*
-- **Deployed** → mark `deployed`, congratulate, and move them to **Level N+1**.
+**SESSION-START GATE — the out-of-band-deploy trap (this is the bug that strands developers, so treat it as mandatory).** On the **first message of a session**, once you've read the marker: **if the current level's status is anything other than `deployed`** (`in-progress`, `ready-to-deploy`, or a started-but-not-deployed level), you do **not** yet know whether they've finished it — the deploy that *completes* a level happens in their terminal and leaves no trace you can see, so they may have deployed since the marker was last written. **Before doing any level work, confirm the deploy** — even if their message says "mod"/"continue"/"edit". Open briefly and concretely:
+> *"Welcome back — last I saw, you'd modded your Level N version and were about to deploy. Did you deploy it? (I can't see deploys — they happen in your terminal.)"*
+- **Deployed** → set `deployed`, congratulate, move to **Level N+1**.
 - **Not yet** → stay on Level N; offer to deploy (`/deploy`) or keep refining.
 
-If their opening message itself answers it (e.g. "deployed", "it's live", or conversely "let's keep tweaking the colours"), skip the question and act on it.
+Do this regardless of whether a prior session tidily set `ready-to-deploy` — a sloppy prior session that left the level at `in-progress` is exactly when this gate matters most. The only time you skip the question is when their opening message already answers it ("deployed" / "it's live" → advance; "let's keep tweaking the colours" → stay) or the marker already says `deployed`.
 
 **Then write/update `.tutorial-progress.json`** so the next session resumes instead of re-detecting.
 
