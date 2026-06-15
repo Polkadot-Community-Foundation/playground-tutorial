@@ -54,7 +54,9 @@ Before changing code, this repo expects `./setup.sh` to have run: it installs de
 }
 ```
 
-`status` is one of `in-progress`, `ready-to-deploy`, or `deployed`. Read it **first**; if present, trust it. (In RevX the marker lives in the in-browser WebContainer's IndexedDB, so it's best-effort there — may not survive a new browser/session. Treat a missing marker as "unknown", not "fresh".)
+`status` is one of `in-progress` (modding, not done), `ready-to-deploy` (mods done, deploy is the only step left), or `deployed` (live — that level is complete). Read it **first** and trust which *level* it names. (In RevX the marker lives in the in-browser WebContainer's IndexedDB, so it's best-effort there — may not survive a new browser/session. Treat a missing marker as "unknown", not "fresh".)
+
+**The one thing the marker can lie about: the deploy.** Deploys run in the developer's terminal (`pg deploy`), **outside this session, leaving NO trace** — no log, no domain in the code, nothing you can see. So a marker that says `in-progress` or `ready-to-deploy` only means "that's where they were *last time you wrote it*" — they may have deployed since, which finishes the level. **At the start of a session, if the marker shows `in-progress` or `ready-to-deploy`, do NOT assume they're still mid-level — confirm the deploy first** (see the resume rule below). Only `deployed` is safe to trust without asking.
 
 **2. Which level's *code* is present (SUPPLEMENT — only ever bumps you UP).** Some levels leave unmistakable code; if you see it, they're at least that far regardless of the marker. Read the source directly and look for these (open `src/utils.ts` / `package.json` — `git` is irrelevant here, the files are right there; ignore `dist/`, `dist*.car`, lockfiles):
 
@@ -68,8 +70,14 @@ There is deliberately **no Level-1 row** — Level-1 mods can't be detected from
 
 **Reconcile.** Take the **highest** level either signal supports:
 - Marker says `level-2` but Level-3 code is present → they're on **Level 3**; bump the marker.
-- Marker present → trust it; never re-detect a fresh start over a marker that says otherwise.
-- **No marker, and no Level-2+ code** → you genuinely cannot tell "fresh" from "did Level 1 already". **Do not assert "fresh Level 1".** Ask once: "Have you already deployed your Level 1 version, or are you just getting started?" — then **immediately write the marker** from their answer so you never ask again.
+- Marker present → trust the *level* it names; never re-detect a fresh start over a marker that says otherwise.
+- **No marker, and no Level-2+ code** → you genuinely cannot tell "fresh" from "did Level 1 already". **Do not assert "fresh Level 1".** Ask once: "Have you already deployed your Level 1 version, or are you just getting started?" — then **immediately write the marker** from their answer.
+
+**Resuming a level whose status is `in-progress` or `ready-to-deploy` (the out-of-band-deploy trap).** This is the one that strands developers. The marker says they were mid-Level-N — but the deploy that *completes* Level N happens in their terminal and you can't see it, so they may have done it since. **Don't pick up as if they're still modding.** Open by confirming, briefly and concretely: *"Welcome back — last time you'd modded your Level N version and were about to deploy. Did you deploy it? (I can't see deploys — they happen in your terminal.)"*
+- **Deployed** → mark `deployed`, congratulate, and move them to **Level N+1**.
+- **Not yet** → stay on Level N; offer to deploy (`/deploy`) or keep refining.
+
+If their opening message itself answers it (e.g. "deployed", "it's live", or conversely "let's keep tweaking the colours"), skip the question and act on it.
 
 **Then write/update `.tutorial-progress.json`** so the next session resumes instead of re-detecting.
 
@@ -77,9 +85,9 @@ There is deliberately **no Level-1 row** — Level-1 mods can't be detected from
 
 The marker only helps if it's already there when the developer reopens — and they reopen constantly, because every deploy sends them out of the session. **Do not wait for the deploy hand-off to write it.** Write or update `.tutorial-progress.json` at each of these moments, the instant they happen:
 
-- **The moment you make the first change of a level** (e.g. you just edited the CSS for a Level 1 mod): write `{ "current_level": N, "levels": { "level-N": { "status": "in-progress" } } }`. This is the write the old guide missed — without it, a developer who mods, then exits to deploy, comes back to a blank slate.
-- **At the deploy hand-off:** set that level's status to `ready-to-deploy`.
-- **When they confirm the deploy on return:** set it to `deployed` (record the `domain` if you know it) and bump `current_level` to the next level.
+- **The moment you make the first change of a level** (e.g. you just edited the CSS for a Level 1 mod): write `{ "current_level": N, "levels": { "level-N": { "status": "in-progress" } } }`. Without it, a developer who mods then exits to deploy comes back to a blank slate.
+- **As soon as the level's goal is met** (it looks/plays different; the feature works) — *before* you even talk about deploying: set status to **`ready-to-deploy`**. Don't leave it at `in-progress`. Developers frequently just `pg deploy` from their terminal without going through the hand-off here, so `ready-to-deploy` is what lets the *next* session know a deploy is the only thing that might have happened since.
+- **When they confirm the deploy** (at the hand-off, or via the resume question above): set `deployed` (record the `domain` if you know it) and bump `current_level` to the next level.
 - **Whenever you detect Level-2+ code or resolve an ambiguity by asking:** write the result straight away.
 
 A stale or missing marker is the failure mode that breaks navigation — err toward writing it more often, not less. It's a tiny local JSON file; rewriting it is free.
