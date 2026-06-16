@@ -278,5 +278,6 @@ copies. (`ContractManager` also accepts a `signerManager` option instead of
 - Don't import `@polkadot-api/sdk-ink` — dropped from product-sdk-contracts.
 - Don't set up a standalone `cdm` account, import a mnemonic, or run a manual
   `cdm deploy` — `pg deploy` builds, deploys, and registers using the
-  developer's product account.
+  developer's product account. A stale standalone `cdm` may already be on disk
+  from an older setup — ignore it; it's not part of this flow.
 - Don't construct contract addresses by hand; deploy writes them into `cdm.json`.
