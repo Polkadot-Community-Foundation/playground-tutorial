@@ -54,7 +54,7 @@ env:
   # source at a pinned commit. Bump REF as the fork advances; the only hard
   # requirement is that its cdm-env stays >= 2.1.0 (w3s address populated).
   PLAYGROUND_CLI_REPO: Polkadot-Community-Foundation/playground-cli
-  PLAYGROUND_CLI_REF: b41feccf9b42334a6d7366a72019896196d48a13
+  PLAYGROUND_CLI_REF: 4a72136a2a7262492b0619fa875d196d55d7850d
 
 jobs:
   deploy:
