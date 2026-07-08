@@ -35,11 +35,11 @@ on:
       - "bun.lock"
       - "vite.config.ts"
       - "tsconfig*.json"
-      - ".github/workflows/deploy-summit.yml"
+      - ".github/workflows/deploy-paseo-next.yml"
 
 concurrency:
   # One signer (5Fk8) signs serially on-chain — never run two deploys at once.
-  group: deploy-summit-playground-tutorial
+  group: deploy-paseo-next-playground-tutorial
   cancel-in-progress: false
 
 env:
