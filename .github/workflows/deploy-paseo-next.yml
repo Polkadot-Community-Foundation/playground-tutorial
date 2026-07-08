@@ -47,7 +47,7 @@ env:
   DOMAIN: playground-tutorial
   # Tag the registry card filters on (one of playground-cli's PLAYGROUND_TAGS).
   PLAYGROUND_TAG: gaming
-  # playground-cli carries the `--env summit` wiring AND resolves the @w3s CDM
+  # playground-cli carries the `--env paseo-next` wiring AND resolves the @w3s CDM
   # meta-registry (0xa5747e60…0141) via @polkadot-community-foundation/cdm-env.
   # It is a PRIVATE package (not on npm) distributed as paritytech release
   # binaries that DON'T carry the Summit cdm-env — so we build the PCF fork from
@@ -56,7 +56,7 @@ env:
   PLAYGROUND_CLI_REPO: Polkadot-Community-Foundation/playground-cli
   # Synced fork main (PCF playground-cli#8): env-aware publish, native Summit
   # descriptors, builder-identity-gate operator opt-out.
-  PLAYGROUND_CLI_REF: 5b5559b2b61140e7ad99abb643bee7303f402bcb
+  PLAYGROUND_CLI_REF: 1be618275f31abd18f07838a92b606317e05e82c
 
 jobs:
   deploy:
@@ -144,7 +144,7 @@ jobs:
             PUBLISH_FLAGS="--playground --moddable --tag $PLAYGROUND_TAG"
           fi
           "$RUNNER_TEMP/playground" deploy \
-            --env summit \
+            --env paseo-next \
             --signer dev --suri "$MNEMONIC" \
             --domain "$DOMAIN" \
             --buildDir dist --no-build \
