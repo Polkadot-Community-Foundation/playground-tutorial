@@ -1,4 +1,4 @@
-name: Deploy to Summit (playground-tutorial.dot)
+name: Deploy to devnet (playground-tutorial.dot)
 
 # Publishes this tutorial as the canonical `playground-tutorial.dot` seed app on
 # the Web3 Summit network. One run does all three legs:
@@ -119,13 +119,13 @@ jobs:
           bun build --compile src/index.ts --outfile "$RUNNER_TEMP/playground"
           "$RUNNER_TEMP/playground" --version
 
-      - name: Sanity — Summit CDM registry resolves (w3s populated)
+      - name: Sanity — devnet CDM registry resolves (w3s populated)
         working-directory: .playground-cli
         run: |
           node --input-type=module -e "import {getRegistryAddress} from '@polkadot-community-foundation/cdm-env'; const a=getRegistryAddress('w3s'); if(!a){console.error('::error::cdm-env w3s registry address is empty — Summit publish would fail'); process.exit(1)} console.log('w3s CDM registry =', a)"
 
       # ── Deploy: host + bind name + (optional) registry publish ──────────────
-      - name: Deploy to Summit
+      - name: Deploy to devnet
         env:
           MNEMONIC: ${{ secrets.MNEMONIC }}
           # Operator opt-out of the synced CLI's builder-identity gate (headless 5Fk8).
