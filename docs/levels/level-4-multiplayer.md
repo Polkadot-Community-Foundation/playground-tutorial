@@ -122,7 +122,7 @@ Skip if you don't need it — the raw `publish` / `subscribe` flow above is enou
 
 ## Do NOT
 
-- Don't go lower-level than `@parity/product-sdk-statement-store` (e.g. `@novasamatech/host-api-wrapper`'s raw statement store) — the client gives you typed publish/subscribe, host-transport routing, and dedup.
+- Don't go lower-level than `@parity/product-sdk-statement-store` (e.g. `@parity/truapi`'s raw statement store) — the client gives you typed publish/subscribe, host-transport routing, and dedup.
 - Don't connect with `mode: "local"` — local mode hits the public WS endpoint which doesn't serve `statement_*` methods. Always `mode: "host"`.
 - Don't hardcode room codes — use a 6-char random generator with a confusable-free alphabet (`ABCDEFGHJKLMNPQRSTUVWXYZ23456789`). Add a `generateRoomCode()` helper to `utils.ts`.
 - Don't share one `StatementStoreClient` instance across rooms — `destroy()` it when the room ends and create a new one for the next match. Subscriptions are scoped to the client.

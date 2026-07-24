@@ -47,7 +47,7 @@ Use the **latest** published versions (do not pin):
 - `@parity/product-sdk-host` — `isInsideContainerSync()`
 
 Do not import `@novasamatech/product-sdk` (frozen) or
-`@novasamatech/host-api-wrapper` (low-level layer the signer wraps) directly.
+`@parity/truapi` (low-level host transport the signer wraps) directly.
 
 ## Account flow (the actual `src/utils.ts` / `App.tsx` pattern)
 
@@ -108,7 +108,7 @@ signing path internally — no manual signer wiring, no `signerType` to pass.
 ## Do NOT
 
 - Don't reintroduce `@novasamatech/product-sdk` or import
-  `@novasamatech/host-api-wrapper` directly — the `@parity/product-sdk-*`
+  `@parity/truapi` directly — the `@parity/product-sdk-*`
   packages are the supported surface.
 - Don't build signers by hand or pass a `signerType` — `HostProvider` handles it.
 - Don't pin SDK versions — install `@latest`.
