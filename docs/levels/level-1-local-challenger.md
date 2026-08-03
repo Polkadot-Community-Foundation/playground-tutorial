@@ -31,9 +31,9 @@ trash-talk, sound). Contract/chain changes are out of scope for this level.
 
 ## Runtime requirements
 
-- **A Polkadot host** — `dot.li` in a browser, or the Polkadot Desktop app
-  (≥ 0.7.5). The host ships the host-api 0.8.x wire protocol the current SDK
-  targets.
+- **A Polkadot host** — `dot.li` in a browser, or a current Polkadot Desktop
+  app. The host connects through the truAPI transport that
+  `@parity/product-sdk-host` targets.
 - **Polkadot mobile (v2)** if signing on a paired phone.
 - Plain browser works for UI iteration via the `DevProvider` fallback (dev
   accounts: Alice, Bob, …) — but host signing and deploy verification need
@@ -107,8 +107,7 @@ signing path internally — no manual signer wiring, no `signerType` to pass.
 
 ## Do NOT
 
-- Don't reintroduce `@novasamatech/product-sdk` or import
-  `@parity/truapi` directly — the `@parity/product-sdk-*`
-  packages are the supported surface.
+- Don't reintroduce `@novasamatech/product-sdk` or import `@parity/truapi`
+  directly — the `@parity/product-sdk-*` packages are the supported surface.
 - Don't build signers by hand or pass a `signerType` — `HostProvider` handles it.
 - Don't pin SDK versions — install `@latest`.
