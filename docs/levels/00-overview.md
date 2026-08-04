@@ -20,7 +20,7 @@ flow and account selection.
 
 Install with `npm install <pkg>@latest`. The app uses the
 `@parity/product-sdk-*` family. The old `@novasamatech/product-sdk` is frozen,
-and `@novasamatech/host-api-wrapper` is the low-level layer that the signer and
+and `@parity/truapi` is the low-level host transport that the signer and
 host packages wrap — do **not** import either of them directly.
 
 | Package | What it provides | Level |

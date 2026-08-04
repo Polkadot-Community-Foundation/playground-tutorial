@@ -108,7 +108,7 @@ if (cid) {
 
 - Don't add a smart contract yet — Level 3
 - Don't add multiplayer — Level 4
-- Don't import `@novasamatech/host-api-wrapper` directly — `getPreimageManager()`
+- Don't import `@parity/truapi` directly — `getPreimageManager()`
   from `@parity/product-sdk-host` is the supported surface for the host-sponsored path
 - Don't open your own WS connection to Bulletin or hardcode old Paseo v1
   endpoints (`asset-hub-paseo-rpc.n.dwellir.com`, `paseo-ipfs.polkadot.io`, …)
