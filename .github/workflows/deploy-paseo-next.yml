@@ -47,16 +47,18 @@ env:
   DOMAIN: playground-tutorial
   # Tag the registry card filters on (one of playground-cli's PLAYGROUND_TAGS).
   PLAYGROUND_TAG: gaming
-  # playground-cli carries the `--env paseo-next` wiring AND resolves the @w3s CDM
-  # meta-registry (0xa5747e60…0141) via @polkadot-community-foundation/cdm-env.
+  # playground-cli carries the `--env devnet` wiring AND resolves the devnet CDM
+  # meta-registry (0x05662b3d…7c1f) via @polkadot-community-foundation/cdm-env.
   # It is a PRIVATE package (not on npm) distributed as paritytech release
-  # binaries that DON'T carry the Summit cdm-env — so we build the PCF fork from
-  # source at a pinned commit. Bump REF as the fork advances; the only hard
-  # requirement is that its cdm-env stays >= 2.1.0 (w3s address populated).
+  # binaries that DON'T carry the PCF devnet env — so we build the PCF fork from
+  # source at a pinned commit. Bump REF as the fork advances; the hard
+  # requirements are cdm-env >= 2.3.0 (devnet address populated) and a
+  # polkadot-app-deploy whose devnet DotNS set is the one hosts resolve
+  # (>= 0.16.7; 0.12.x points at the pre-redeploy DotNS contracts).
   PLAYGROUND_CLI_REPO: Polkadot-Community-Foundation/playground-cli
-  # Synced fork main (PCF playground-cli#8): env-aware publish, native Summit
-  # descriptors, builder-identity-gate operator opt-out.
-  PLAYGROUND_CLI_REF: ce66fdb6762101b9ae5d38848add510132bd075d
+  # Synced fork main (PCF playground-cli#74, CLI 0.48.0): devnet default,
+  # polkadot-app-deploy 0.16.7, cdm-env 2.3.0, builder-identity-gate opt-out.
+  PLAYGROUND_CLI_REF: 3ee1817bf93286e3da112586be4a98cf5065a795
 
 jobs:
   deploy:
@@ -115,14 +117,14 @@ jobs:
         working-directory: .playground-cli
         run: |
           pnpm install --frozen-lockfile
-          # Compile a self-contained binary (bundles deps incl. cdm-env w3s).
+          # Compile a self-contained binary (bundles deps incl. cdm-env devnet).
           bun build --compile src/index.ts --outfile "$RUNNER_TEMP/playground"
           "$RUNNER_TEMP/playground" --version
 
-      - name: Sanity — devnet CDM registry resolves (w3s populated)
+      - name: Sanity — devnet CDM registry resolves
         working-directory: .playground-cli
         run: |
-          node --input-type=module -e "import {getRegistryAddress} from '@polkadot-community-foundation/cdm-env'; const a=getRegistryAddress('w3s'); if(!a){console.error('::error::cdm-env w3s registry address is empty — Summit publish would fail'); process.exit(1)} console.log('w3s CDM registry =', a)"
+          node --input-type=module -e "import {getRegistryAddress} from '@polkadot-community-foundation/cdm-env'; const a=getRegistryAddress('devnet'); if(!a){console.error('::error::cdm-env devnet registry address is empty — devnet publish would fail'); process.exit(1)} console.log('devnet CDM registry =', a)"
 
       # ── Deploy: host + bind name + (optional) registry publish ──────────────
       - name: Deploy to devnet
