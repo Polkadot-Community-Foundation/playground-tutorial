@@ -105,9 +105,15 @@ For per-room key-value state (e.g., scoreboard) the repo can use `ChannelStore`:
 ```ts
 import { StatementStoreClient, ChannelStore } from "@parity/product-sdk-statement-store";
 
+// Values carry an optional `timestamp` (set on write when missing); the
+// latest value per channel wins.
+type ScoreboardEntry = { p1: number; p2: number; timestamp?: number };
+
 const channels = new ChannelStore<ScoreboardEntry>(client, { topic2: roomCode });
 await channels.write("score", { p1: 2, p2: 1 });
-channels.subscribe("score", (value) => { /* re-render */ });
+channels.onChange((channel, value) => {
+    if (channel === "score") { /* re-render */ }
+});
 ```
 
 Skip if you don't need it — the raw `publish` / `subscribe` flow above is enough for commit-reveal.

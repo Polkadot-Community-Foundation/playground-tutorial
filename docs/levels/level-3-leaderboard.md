@@ -230,7 +230,8 @@ import { paseo_asset_hub } from "@parity/product-sdk-descriptors/paseo-asset-hub
 import cdmJson from "../cdm.json";
 
 // Create the chain client lazily, once, and reuse it. `client` below is the
-// raw PolkadotClient for Asset Hub.
+// product's shared PolkadotClient for Asset Hub: release it with
+// `chainClient.destroy()`, never `client.destroy()`.
 const chainClient = await createChainClient({ chains: { assetHub: paseo_asset_hub } });
 const client = chainClient.raw.assetHub;
 
@@ -239,10 +240,11 @@ await client.getBestBlocks();           // wake the chain follow first
 
 // 1. map the connected product account (plain runtime, no registry query)
 const initRuntime = createContractRuntimeFromClient(client, paseo_asset_hub);
-await ensureContractAccountMapped(initRuntime, account.address, account.getSigner());
+const mapped = await ensureContractAccountMapped(initRuntime, account.address, account.getSigner());
+if (!mapped.ok) throw mapped.error;
 
-// 2. NOW resolve live addresses from the registry
-const manager = await ContractManager.fromLiveClient(
+// 2. NOW resolve live addresses from the registry (returns a Result)
+const managerResult = await ContractManager.fromLiveClient(
   cdmJson, client, paseo_asset_hub,
   {
     defaultOrigin:  account.address,
@@ -251,7 +253,8 @@ const manager = await ContractManager.fromLiveClient(
     libraries: ["@rps/leaderboard"],
   },
 );
-const lb = manager.getContract("@rps/leaderboard");
+if (!managerResult.ok) throw managerResult.error;
+const lb = managerResult.value.getContract("@rps/leaderboard");
 
 // queries return { success, value, gasRequired }; pass 0x… hex for address args
 const res = await lb.getPlayerCid.query(account.h160Address);

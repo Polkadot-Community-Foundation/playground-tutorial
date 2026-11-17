@@ -48,17 +48,19 @@ async function uploadToBulletin(bytes: Uint8Array): Promise<string> {
     return result.cid.toString();
 }
 
-// Read back (inside the host):
+// Read back (inside the host). fetchBytes returns a Result, not the bytes.
 async function fetchFromBulletin(cid: string): Promise<Uint8Array> {
-    return client.fetchBytes(cid);
+    const result = await client.fetchBytes(cid);
+    if (!result.ok) throw result.error;
+    return result.value;
 }
 ```
 
 `checkAuthorization` from the same package does a pre-flight check that the
 connected account is allowed to store on Bulletin. If the account has no
 Bulletin allowance, the fallback is the **host-sponsored** path for small blobs:
-`getPreimageManager()` from `@parity/product-sdk-host`, then
-`preimageManager.submit(bytes)` — the host's account pays for storage.
+`await getPreimageManager()` from `@parity/product-sdk-host` (`null` outside a
+host), then `preimageManager.submit(bytes)` — the host's account pays for storage.
 
 ## CID pointer flow (the Level 2 addition)
 
